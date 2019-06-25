@@ -1,6 +1,7 @@
 """A simple program to simulate the snake game on terminal"""
 import os
 import random
+import signal
 import sys
 
 UP = (-1, 0)
@@ -113,16 +114,30 @@ class Game(object):
         return True
 
 
+def interrupted(signum, frame):
+    raise Exception
+
+
 if __name__ == "__main__":
+    timeout = 0.5
+    signal.signal(signal.SIGALRM, interrupted)
+
     height = input("Enter the height of the board: ")
     width = input("Enter the width of the board: ")
     game = Game(int(height), int(width))
 
     while True:
+        signal.setitimer(signal.ITIMER_REAL, timeout)
         os.system('clear')
         game.render()
-        step = input()
+        step = None
+        try:
+            step = input()
+        except:
+            pass
         if not game.move(step):
             break
+
+    signal.alarm(0)
 
     print(f"Your score: {game.score}")
