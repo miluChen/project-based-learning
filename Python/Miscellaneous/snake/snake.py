@@ -1,4 +1,5 @@
 """A simple program to simulate the snake game on terminal"""
+import curses
 import os
 import random
 import signal
@@ -10,6 +11,9 @@ LEFT = (0, -1)
 RIGHT = (0, 1)
 MIN_DIMENSION = 5
 INIT_SNAKE_LEN = 3
+MAX_LEVEL = 7
+LEVELS = [10, 8, 6, 4, 3, 2, 1]
+APPLE_NUM = 3
 
 
 class Snake(object):
@@ -55,6 +59,11 @@ class Game(object):
         self.snake = Snake([(int(self.height/2), i) for i in range(INIT_SNAKE_LEN)], RIGHT)
         # initialize the apple
         self.apple = self.generate_apple()
+        # initialize game level
+        self.levels = LEVELS
+        self.level = 0
+        self.apple_need = APPLE_NUM
+        self.win = False
 
     def generate_apple(self):
         return Apple(self.height, self.width, self.snake.body)
@@ -77,23 +86,32 @@ class Game(object):
         matrix[self.apple.position[0]][self.apple.position[1]] = '*'
         return matrix
 
-    def render(self):
-        matrix = self.board_matrix()
-        for row in matrix:
-            print(''.join(row))
+    def render(self, stdscr):
+        matrix = game.board_matrix()
+        stdscr.addstr(0, 0, "Level: {}".format(self.level+1))
+        stdscr.addstr(1, 0, "Score: {}".format(self.score))
+        for i in range(len(matrix)):
+            for j in range(len(matrix[i])):
+                stdscr.addstr(i+2, j, matrix[i][j])
+
+    def print_result(self, stdscr):
+        message = "You win!!!" if self.win else "You died!!!"
+        stdscr.addstr(self.height + 5, 0, message)
 
     def move(self, direction):
-        if direction == 'w' or direction == '\x1b[A':
+        if direction == 'w':
             direction = UP
-        elif direction == 's' or direction == '\x1b[B':
+        elif direction == 's':
             direction = DOWN
-        elif direction == 'd' or direction == '\x1b[C':
+        elif direction == 'd':
             direction = RIGHT
-        elif direction == 'a' or direction == '\x1b[D':
+        elif direction == 'a':
             direction = LEFT
         
         if direction in (UP, DOWN, RIGHT, LEFT):
-            self.snake.set_direction(direction)
+            if not (direction[0] + self.snake.direction[0] == 0 and 
+                    direction[1] + self.snake.direction[1] == 0):
+                self.snake.set_direction(direction)
 
         next_x = self.snake.head[0] + self.snake.direction[0]
         next_y = self.snake.head[1] + self.snake.direction[1]
@@ -108,36 +126,49 @@ class Game(object):
         if next_position == self.apple.position:
             self.snake.take_step(next_position, grow=True)
             self.score += 1
+            # check whether go to the next level
+            if self.score % self.apple_need == 0:
+                self.snake = Snake(
+                        [(int(self.height/2), i) for i in range(INIT_SNAKE_LEN)], RIGHT
+                        )
+                self.level += 1
+                if self.level >= MAX_LEVEL:
+                    self.win = True
+                    return False
+                
             self.apple = self.generate_apple()
         else:
             self.snake.take_step(next_position)
         return True
 
 
-def interrupted(signum, frame):
-    raise Exception
-
-
-if __name__ == "__main__":
-    timeout = 0.5
-    signal.signal(signal.SIGALRM, interrupted)
-
-    height = input("Enter the height of the board: ")
-    width = input("Enter the width of the board: ")
-    game = Game(int(height), int(width))
-
+def play(stdscr, game):
     while True:
-        signal.setitimer(signal.ITIMER_REAL, timeout)
-        os.system('clear')
-        game.render()
+        curses.halfdelay(game.levels[game.level])
+        stdscr.clear()
+        # render the game
+        game.render(stdscr)
+        stdscr.refresh()
         step = None
         try:
-            step = input()
+            step = stdscr.getkey()
         except:
             pass
         if not game.move(step):
             break
 
-    signal.alarm(0)
+    game.print_result(stdscr)
+    stdscr.refresh()
+    curses.nocbreak()
 
-    print(f"Your score: {game.score}")
+    stdscr.getkey()
+    stdscr.getkey()
+    stdscr.getkey()
+
+
+if __name__ == "__main__":
+    height = input("Enter the height of the board: ")
+    width = input("Enter the width of the board: ")
+    game = Game(int(height), int(width))
+
+    curses.wrapper(play, game)
